@@ -9,22 +9,28 @@ import (
 	"github.com/justtaldevelops/worldcompute/dragonfly/mcdb"
 	"github.com/justtaldevelops/worldcompute/dragonfly/world"
 	"github.com/justtaldevelops/worldcompute/worldrenderer"
+	"github.com/mholt/archiver"
 	"github.com/pelletier/go-toml"
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/auth"
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
+	"github.com/sandertv/gophertunnel/minecraft/text"
 	"golang.org/x/oauth2"
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sync"
 )
 
 var (
-	chunkMu  sync.Mutex
-	chunks   = make(map[world.ChunkPos]*chunk.Chunk)
-	renderer *worldrenderer.Renderer
+	chunkMu        sync.Mutex
+	chunks         = make(map[world.ChunkPos]*chunk.Chunk)
+	renderer       *worldrenderer.Renderer
+	saveInProgress bool
 )
 
 // The following program implements a proxy that forwards players from one local address to a remote address.
@@ -54,7 +60,7 @@ func main() {
 		}
 	}()
 
-	renderer = worldrenderer.NewRendererDirect(8, 6.5, world.ChunkPos{}, &chunkMu, chunks)
+	renderer = worldrenderer.NewRendererDirect(4, 6.5, world.ChunkPos{}, &chunkMu, chunks)
 
 	ebiten.SetWindowSize(1718, 1360)
 	ebiten.SetWindowResizable(true)
@@ -124,10 +130,23 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					int32(pos.Z()) >> 4,
 				})
 			case *packet.Text:
-				if pk.Message == "save" {
-					fmt.Println("Saving chunks...")
+				if saveInProgress {
+					saveInProgress = false
+					if pk.Message == "cancel" {
+						_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<red><bold><italic>Cancelled save.</italic></bold></red>")})
+						continue
+					}
+					fileName := pk.Message
+					fullPath := config.Downloader.OutputDirectory + string(os.PathSeparator) + fileName
+					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<aqua><bold><italic>Processing chunks to be saved...</italic></bold></aqua>")})
 					go func() {
-						prov, err := mcdb.New("output", world.Overworld)
+						dir, err := ioutil.TempDir(os.TempDir(), fileName)
+						if err != nil {
+							panic(err)
+						}
+						defer os.RemoveAll(dir)
+
+						prov, err := mcdb.New(dir, world.Overworld)
 						if err != nil {
 							panic(err)
 						}
@@ -147,8 +166,39 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						if err != nil {
 							panic(err)
 						}
-						fmt.Println("Done.")
+
+						var files []string
+						err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+							if err != nil {
+								return err
+							}
+							files = append(files, path)
+							return nil
+						})
+						if err != nil {
+							panic(err)
+						}
+
+						err = archiver.NewZip().Archive(files, fullPath+".zip")
+						if err != nil {
+							panic(err)
+						}
+						err = os.Rename(fullPath+".zip", fullPath+".mcworld")
+						if err != nil {
+							panic(err)
+						}
+
+						if runtime.GOOS == "windows" {
+							_ = exec.Command(`explorer`, `/select,`, fullPath+".mcworld").Run()
+						}
+
+						_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<green><bold><italic>Saved all chunks received to \"%v.mcworld\"!</italic></bold></green>", fileName)})
 					}()
+					continue
+				}
+				if pk.Message == "save" {
+					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<yellow><bold><italic>What would you like to save the file as?</italic></bold></yellow>")})
+					saveInProgress = true
 					continue
 				}
 			}
@@ -274,6 +324,9 @@ type config struct {
 	Connection struct {
 		LocalAddress  string
 		RemoteAddress string
+	}
+	Downloader struct {
+		OutputDirectory string
 	}
 }
 

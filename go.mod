@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hajimehoshi/ebiten/v2 v2.2.4
 	github.com/klauspost/compress v1.13.6 // indirect
+	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/muhammadmuzzammil1998/jsonc v0.0.0-20201229145248-615b0916ca38 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/pelletier/go-toml v1.9.4
@@ -27,8 +28,15 @@ require (
 )
 
 require (
+	github.com/dsnet/compress v0.0.1 // indirect
+	github.com/frankban/quicktest v1.14.2 // indirect
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20210727001814-0db043d8d5be // indirect
+	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/jezek/xgb v0.0.0-20210312150743-0e0f116e1240 // indirect
+	github.com/nwaples/rardecode v1.1.2 // indirect
+	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
+	github.com/ulikunitz/xz v0.5.10 // indirect
+	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6 // indirect
 	golang.org/x/mobile v0.0.0-20210902104108-5d9a33257ab5 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
