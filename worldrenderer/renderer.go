@@ -18,14 +18,16 @@ type Renderer struct {
 	shouldCenter  bool
 	centerPos     world.ChunkPos
 
-	chunkMu     *sync.Mutex
-	chunks      map[world.ChunkPos]*chunk.Chunk
+	chunkMu *sync.Mutex
+	chunks  map[world.ChunkPos]*chunk.Chunk
+
+	renderMu    *sync.Mutex
 	renderCache map[world.ChunkPos]*ebiten.Image
 }
 
 // NewRenderer creates a new Renderer instance.
 func NewRenderer(scale int, drift float64, path string) *Renderer {
-	r := &Renderer{scale: scale, drift: drift, chunkMu: new(sync.Mutex), shouldCenter: true}
+	r := &Renderer{scale: scale, drift: drift, chunkMu: new(sync.Mutex), renderMu: new(sync.Mutex), shouldCenter: true}
 	r.centerPos, r.chunks = loadWorld(path)
 	r.renderCache = renderWorld(scale, r.chunkMu, r.chunks)
 	return r
@@ -33,7 +35,7 @@ func NewRenderer(scale int, drift float64, path string) *Renderer {
 
 // NewRendererDirect creates a new renderer with the given chunks.
 func NewRendererDirect(scale int, drift float64, centerPos world.ChunkPos, chunkMu *sync.Mutex, chunks map[world.ChunkPos]*chunk.Chunk) *Renderer {
-	r := &Renderer{scale: scale, drift: drift, shouldCenter: true}
+	r := &Renderer{scale: scale, drift: drift, renderMu: new(sync.Mutex), shouldCenter: true}
 	r.renderCache = renderWorld(scale, chunkMu, chunks)
 	r.centerPos = centerPos
 	r.chunkMu = chunkMu
@@ -92,6 +94,8 @@ func (r *Renderer) Draw(screen *ebiten.Image) {
 		r.shouldCenter = false
 	}
 
+	r.renderMu.Lock()
+	defer r.renderMu.Unlock()
 	for pos, ch := range r.renderCache {
 		chunkW, chunkH := ch.Bounds().Dx(), ch.Bounds().Dy()
 		offsetX, offsetZ := float64(chunkW/2)+r.pos.X(), float64(chunkH/2)+r.pos.Y()
@@ -117,7 +121,9 @@ func (r *Renderer) Rerender() {
 // RerenderChunk rerenders the chunk at the given position.
 func (r *Renderer) RerenderChunk(pos world.ChunkPos) {
 	r.chunkMu.Lock()
+	r.renderMu.Lock()
 	defer r.chunkMu.Unlock()
+	defer r.renderMu.Unlock()
 	r.renderCache[pos] = renderChunk(r.scale, r.chunks[pos])
 }
 
