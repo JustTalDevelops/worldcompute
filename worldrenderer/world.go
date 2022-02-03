@@ -2,9 +2,9 @@ package worldrenderer
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/justtaldevelops/worldcompute/chunk"
-	"github.com/justtaldevelops/worldcompute/mcdb"
-	"github.com/justtaldevelops/worldcompute/world"
+	"github.com/justtaldevelops/worldcompute/dragonfly/chunk"
+	"github.com/justtaldevelops/worldcompute/dragonfly/mcdb"
+	"github.com/justtaldevelops/worldcompute/dragonfly/world"
 	"github.com/nfnt/resize"
 	"image"
 	"sync"

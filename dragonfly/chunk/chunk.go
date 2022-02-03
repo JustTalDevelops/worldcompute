@@ -1,7 +1,7 @@
 package chunk
 
 import (
-	"github.com/justtaldevelops/worldcompute/cube"
+	"github.com/justtaldevelops/worldcompute/dragonfly/cube"
 	"sync"
 )
 

@@ -1,9 +1,9 @@
 package world
 
 import (
+	"github.com/justtaldevelops/worldcompute/dragonfly/cube"
 	"go.uber.org/atomic"
 	"sync"
-	"github.com/justtaldevelops/worldcompute/cube"
 )
 
 // Settings holds the settings of a World. These are typically saved to a level.dat file. It is safe to pass the same

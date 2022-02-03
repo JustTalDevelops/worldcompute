@@ -1,10 +1,10 @@
-package states
+package world
 
 import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"github.com/justtaldevelops/worldcompute/chunk"
+	"github.com/justtaldevelops/worldcompute/dragonfly/chunk"
 	"github.com/sandertv/gophertunnel/minecraft/nbt"
 	"sort"
 	"strings"

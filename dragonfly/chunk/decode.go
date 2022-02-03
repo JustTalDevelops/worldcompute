@@ -3,7 +3,7 @@ package chunk
 import (
 	"bytes"
 	"fmt"
-	"github.com/justtaldevelops/worldcompute/cube"
+	"github.com/justtaldevelops/worldcompute/dragonfly/cube"
 )
 
 // StateToRuntimeID must hold a function to convert a name and its state properties to a runtime ID.

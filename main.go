@@ -132,6 +132,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 							panic(err)
 						}
 						for pos, c := range chunks {
+							c.Compact()
 							err = prov.SaveChunk(pos, c)
 							if err != nil {
 								panic(err)

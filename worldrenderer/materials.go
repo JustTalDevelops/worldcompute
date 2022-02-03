@@ -2,8 +2,7 @@ package worldrenderer
 
 import (
 	_ "embed"
-	"github.com/justtaldevelops/worldcompute/chunk"
-	_ "github.com/justtaldevelops/worldcompute/states"
+	"github.com/justtaldevelops/worldcompute/dragonfly/chunk"
 	"github.com/sandertv/gophertunnel/minecraft/nbt"
 )
 

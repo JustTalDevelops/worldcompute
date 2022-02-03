@@ -1,8 +1,8 @@
 package world
 
 import (
+	"github.com/justtaldevelops/worldcompute/dragonfly/cube"
 	"time"
-	"github.com/justtaldevelops/worldcompute/cube"
 )
 
 var (

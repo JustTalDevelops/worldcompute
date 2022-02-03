@@ -3,8 +3,8 @@ package worldrenderer
 import (
 	"github.com/go-gl/mathgl/mgl64"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/justtaldevelops/worldcompute/chunk"
-	"github.com/justtaldevelops/worldcompute/world"
+	"github.com/justtaldevelops/worldcompute/dragonfly/chunk"
+	"github.com/justtaldevelops/worldcompute/dragonfly/world"
 	"sync"
 )
 

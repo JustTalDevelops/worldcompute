@@ -3,7 +3,7 @@ package chunk
 import (
 	"bytes"
 	"container/list"
-	"github.com/justtaldevelops/worldcompute/cube"
+	"github.com/justtaldevelops/worldcompute/dragonfly/cube"
 )
 
 // SkyLight holds a light implementation that can be used for propagating skylight through a sub chunk.
