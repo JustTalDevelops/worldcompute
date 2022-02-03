@@ -221,10 +221,11 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 					c, err := chunk.NetworkDecode(airRID, pk.RawPayload, int(pk.SubChunkCount), oldFormat, worldRange)
 					if err == nil {
 						chunkMu.Lock()
-						chunks[world.ChunkPos{pk.ChunkX, pk.ChunkZ}] = c
+						chunkPos := world.ChunkPos{pk.ChunkX, pk.ChunkZ}
+						chunks[chunkPos] = c
 						chunkMu.Unlock()
 
-						renderer.Rerender()
+						renderer.RerenderChunk(chunkPos)
 					} else {
 						fmt.Println(err)
 					}

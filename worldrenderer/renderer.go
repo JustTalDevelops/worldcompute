@@ -114,6 +114,13 @@ func (r *Renderer) Rerender() {
 	r.needsRerender = true
 }
 
+// RerenderChunk rerenders the chunk at the given position.
+func (r *Renderer) RerenderChunk(pos world.ChunkPos) {
+	r.chunkMu.Lock()
+	defer r.chunkMu.Unlock()
+	r.renderCache[pos] = renderChunk(r.scale, r.chunks[pos])
+}
+
 // Recenter centers the renderer on the given chunk.
 func (r *Renderer) Recenter(pos world.ChunkPos) {
 	r.centerPos = pos
