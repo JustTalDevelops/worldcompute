@@ -26,15 +26,15 @@ type Renderer struct {
 // NewRenderer creates a new Renderer instance.
 func NewRenderer(scale int, drift float64, path string) *Renderer {
 	r := &Renderer{scale: scale, drift: drift, chunkMu: new(sync.Mutex), shouldCenter: true}
-	r.centerPos, r.chunks = LoadWorld(path)
-	r.renderCache = RenderWorld(scale, r.chunkMu, r.chunks)
+	r.centerPos, r.chunks = loadWorld(path)
+	r.renderCache = renderWorld(scale, r.chunkMu, r.chunks)
 	return r
 }
 
 // NewRendererDirect creates a new renderer with the given chunks.
 func NewRendererDirect(scale int, drift float64, centerPos world.ChunkPos, chunkMu *sync.Mutex, chunks map[world.ChunkPos]*chunk.Chunk) *Renderer {
 	r := &Renderer{scale: scale, drift: drift, shouldCenter: true}
-	r.renderCache = RenderWorld(scale, chunkMu, chunks)
+	r.renderCache = renderWorld(scale, chunkMu, chunks)
 	r.centerPos = centerPos
 	r.chunkMu = chunkMu
 	r.chunks = chunks
@@ -74,7 +74,7 @@ func (r *Renderer) Update() error {
 		}.Mul(float64(r.scale) * 16)
 	}
 	if r.needsRerender {
-		r.renderCache = RenderWorld(r.scale, r.chunkMu, r.chunks)
+		r.renderCache = renderWorld(r.scale, r.chunkMu, r.chunks)
 		r.needsRerender = false
 	}
 	return nil

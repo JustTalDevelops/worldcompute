@@ -80,7 +80,6 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 
 	data := serverConn.GameData()
 	data.GameRules = append(data.GameRules, []protocol.GameRule{{Name: "showCoordinates", Value: true}}...)
-	fmt.Println(data.CustomBlocks)
 
 	airRID, _ := chunk.StateToRuntimeID("minecraft:air", nil)
 	oldFormat := data.BaseGameVersion == "1.17.40"

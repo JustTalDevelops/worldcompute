@@ -10,8 +10,8 @@ import (
 	"sync"
 )
 
-// LoadWorld loads a world and returns all of its chunks.
-func LoadWorld(path string) (world.ChunkPos, map[world.ChunkPos]*chunk.Chunk) {
+// loadWorld loads a world and returns all of its chunks.
+func loadWorld(path string) (world.ChunkPos, map[world.ChunkPos]*chunk.Chunk) {
 	prov, err := mcdb.New(path, world.Overworld)
 	if err != nil {
 		panic(err)
@@ -32,35 +32,20 @@ func LoadWorld(path string) (world.ChunkPos, map[world.ChunkPos]*chunk.Chunk) {
 	return centerPos, chunks
 }
 
-// RenderWorld renders a world to *ebiten.Images.
-func RenderWorld(scale int, chunkMu *sync.Mutex, chunks map[world.ChunkPos]*chunk.Chunk) map[world.ChunkPos]*ebiten.Image {
+// renderWorld renders a world to *ebiten.Images.
+func renderWorld(scale int, chunkMu *sync.Mutex, chunks map[world.ChunkPos]*chunk.Chunk) map[world.ChunkPos]*ebiten.Image {
 	chunkMu.Lock()
 	defer chunkMu.Unlock()
 
-	var renderMu sync.Mutex
 	rendered := make(map[world.ChunkPos]*ebiten.Image)
-
-	var wg sync.WaitGroup
 	for pos, ch := range chunks {
-		wg.Add(1)
-
-		ch := ch
-		pos := pos
-		go func() {
-			c := RenderChunk(scale, ch)
-			renderMu.Lock()
-			rendered[pos] = c
-			renderMu.Unlock()
-			wg.Done()
-		}()
+		rendered[pos] = renderChunk(scale, ch)
 	}
-
-	wg.Wait()
 	return rendered
 }
 
-// RenderChunk renders a new chunk image from the given chunk.
-func RenderChunk(scale int, ch *chunk.Chunk) *ebiten.Image {
+// renderChunk renders a new chunk image from the given chunk.
+func renderChunk(scale int, ch *chunk.Chunk) *ebiten.Image {
 	img := image.NewRGBA(image.Rectangle{Max: image.Point{X: 16, Y: 16}})
 	for x := byte(0); x < 16; x++ {
 		for z := byte(0); z < 16; z++ {
