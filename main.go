@@ -9,7 +9,6 @@ import (
 	"github.com/justtaldevelops/worldcompute/dragonfly/mcdb"
 	"github.com/justtaldevelops/worldcompute/dragonfly/world"
 	"github.com/justtaldevelops/worldcompute/worldrenderer"
-	"github.com/mholt/archiver"
 	"github.com/pelletier/go-toml"
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/auth"
@@ -21,7 +20,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"sync"
 )
@@ -91,6 +89,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 	oldFormat := data.BaseGameVersion == "1.17.40"
 	worldRange := world.Overworld.Range()
 	pos := data.PlayerPosition
+
 	fmt.Println("Completed connection.")
 
 	var g sync.WaitGroup
@@ -167,23 +166,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 							panic(err)
 						}
 
-						var files []string
-						err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-							if err != nil {
-								return err
-							}
-							files = append(files, path)
-							return nil
-						})
-						if err != nil {
-							panic(err)
-						}
-
-						err = archiver.NewZip().Archive(files, fullPath+".zip")
-						if err != nil {
-							panic(err)
-						}
-						err = os.Rename(fullPath+".zip", fullPath+".mcworld")
+						err = archive(dir, fullPath+".mcworld")
 						if err != nil {
 							panic(err)
 						}
