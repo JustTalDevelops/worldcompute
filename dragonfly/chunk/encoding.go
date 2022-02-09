@@ -175,6 +175,7 @@ func (networkPersistentEncoding) decodePalette(buf *bytes.Buffer, blockSize pale
 		temp, ok := StateToRuntimeID("minecraft:"+b.Name, b.State)
 		if !ok {
 			// Fuck this shit.
+			fmt.Println(b.Name, b.State)
 			temp, _ = StateToRuntimeID("minecraft:air", nil)
 		}
 		uint32s[i] = temp

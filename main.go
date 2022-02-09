@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -213,35 +214,37 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						int32(pos.Z()) >> 4,
 					})
 				}
-			//case *packet.SubChunk:
-			//	go func() {
-			//		for _, entry := range pk.SubChunkEntries {
-			//			if entry.Result == protocol.SubChunkResultSuccess {
-			//				offsetPos := world.ChunkPos{
-			//					pk.Position.X() + int32(entry.Offset[0]),
-			//					pk.Position.Z() + int32(entry.Offset[2]),
-			//				}
-			//
-			//				chunkMu.Lock()
-			//				c, ok := chunks[offsetPos]
-			//				if !ok {
-			//					c = chunk.New(airRID, worldRange)
-			//					chunks[offsetPos] = c
-			//				}
-			//				chunkMu.Unlock()
-			//
-			//				var ind byte
-			//				newSub, err := chunk.DecodeSubChunk(bytes.NewBuffer(entry.RawPayload), c, &ind, chunk.NetworkEncoding)
-			//				if err == nil {
-			//					chunkMu.Lock()
-			//					c.Sub()[ind] = newSub
-			//					chunkMu.Unlock()
-			//				} else {
-			//					fmt.Println(err)
-			//				}
-			//			}
-			//		}
-			//	}()
+			case *packet.SubChunk:
+				go func() {
+					for _, entry := range pk.SubChunkEntries {
+						if entry.Result == protocol.SubChunkResultSuccess {
+							offsetPos := world.ChunkPos{
+								pk.Position.X() + int32(entry.Offset[0]),
+								pk.Position.Z() + int32(entry.Offset[2]),
+							}
+
+							chunkMu.Lock()
+							c, ok := chunks[offsetPos]
+							if !ok {
+								c = chunk.New(airRID, worldRange)
+								chunks[offsetPos] = c
+							}
+							chunkMu.Unlock()
+
+							var ind byte
+							newSub, err := chunk.DecodeSubChunk(bytes.NewBuffer(entry.RawPayload), c, &ind, chunk.NetworkEncoding)
+							if err == nil {
+								chunkMu.Lock()
+								c.Sub()[ind] = newSub
+								chunkMu.Unlock()
+							} else {
+								fmt.Println(err)
+							}
+
+							renderer.RerenderChunk(offsetPos)
+						}
+					}
+				}()
 			case *packet.ChangeDimension:
 				chunkMu.Lock()
 				for chunkPos := range chunks {
@@ -251,50 +254,40 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 
 				renderer.Rerender()
 			case *packet.LevelChunk:
-				go func() {
-					c, err := chunk.NetworkDecode(airRID, pk.RawPayload, int(pk.SubChunkCount), oldFormat, worldRange)
-					if err == nil {
-						chunkMu.Lock()
-						chunkPos := world.ChunkPos{pk.ChunkX, pk.ChunkZ}
-						chunks[chunkPos] = c
-						chunkMu.Unlock()
-
-						renderer.RerenderChunk(chunkPos)
-					} else {
-						fmt.Println(err)
+				switch pk.SubChunkRequestMode {
+				case protocol.SubChunkRequestModeLimited, protocol.SubChunkRequestModeLimitless:
+					subChunkLimit := byte(24)
+					if pk.SubChunkRequestMode == protocol.SubChunkRequestModeLimited {
+						subChunkLimit = byte(pk.HighestSubChunk)
 					}
-				}()
-				//switch pk.SubChunkRequestMode {
-				//case protocol.SubChunkRequestModeLimited, protocol.SubChunkRequestModeLimitless:
-				//	subChunkLimit := byte(24)
-				//	if pk.SubChunkRequestMode == protocol.SubChunkRequestModeLimited {
-				//		subChunkLimit = byte(pk.HighestSubChunk)
-				//	}
-				//
-				//	var offsets [][3]byte
-				//	for x := byte(0); x < 4; x++ {
-				//		for z := byte(0); z < 4; z++ {
-				//			for y := subChunkLimit; y > 0; y-- {
-				//				offsets = append(offsets, [3]byte{x << 4, y, z << 4})
-				//			}
-				//		}
-				//	}
-				//	_ = serverConn.WritePacket(&packet.SubChunkRequest{
-				//		Position: protocol.SubChunkPos{pk.Position.X(), 0, pk.Position.Z()},
-				//		Offsets:  offsets,
-				//	})
-				//case protocol.SubChunkRequestModeLegacy:
-				//	go func() {
-				//		c, err := chunk.NetworkDecode(airRID, pk.RawPayload, int(pk.SubChunkCount), oldFormat, worldRange)
-				//		if err == nil {
-				//			chunkMu.Lock()
-				//			chunks[world.ChunkPos{pk.Position.X(), pk.Position.Z()}] = c
-				//			chunkMu.Unlock()
-				//		} else {
-				//			fmt.Println(err)
-				//		}
-				//	}()
-				//}
+
+					var offsets [][3]byte
+					for x := byte(0); x < 4; x++ {
+						for z := byte(0); z < 4; z++ {
+							for y := subChunkLimit; y > 0; y-- {
+								offsets = append(offsets, [3]byte{x << 4, y, z << 4})
+							}
+						}
+					}
+					_ = serverConn.WritePacket(&packet.SubChunkRequest{
+						Position: protocol.SubChunkPos{pk.Position.X(), 0, pk.Position.Z()},
+						Offsets:  offsets,
+					})
+				case protocol.SubChunkRequestModeLegacy:
+					go func() {
+						c, err := chunk.NetworkDecode(airRID, pk.RawPayload, int(pk.SubChunkCount), oldFormat, worldRange)
+						if err == nil {
+							chunkMu.Lock()
+							chunkPos := world.ChunkPos{pk.Position.X(), pk.Position.Z()}
+							chunks[chunkPos] = c
+							chunkMu.Unlock()
+
+							renderer.RerenderChunk(chunkPos)
+						} else {
+							fmt.Println(err)
+						}
+					}()
+				}
 			}
 			if err := conn.WritePacket(pk); err != nil {
 				return
