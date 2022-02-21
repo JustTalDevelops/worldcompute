@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/go-gl/mathgl/mgl64"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/justtaldevelops/worldcompute/dragonfly/chunk"
 	"github.com/justtaldevelops/worldcompute/dragonfly/mcdb"
@@ -39,6 +40,7 @@ func main() {
 
 	go func() {
 		fmt.Println("worldcompute has loaded. connect to " + config.Connection.LocalAddress)
+		fmt.Println("redirecting connections to " + config.Connection.RemoteAddress)
 		p, err := minecraft.NewForeignStatusProvider(config.Connection.RemoteAddress)
 		if err != nil {
 			panic(err)
@@ -59,7 +61,7 @@ func main() {
 		}
 	}()
 
-	renderer = worldrenderer.NewRendererDirect(4, 6.5, world.ChunkPos{}, &chunkMu, chunks)
+	renderer = worldrenderer.NewRendererDirect(4, 6.5, mgl64.Vec2{}, &chunkMu, chunks)
 
 	ebiten.SetWindowSize(1718, 1360)
 	ebiten.SetWindowResizable(true)
@@ -90,6 +92,11 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 	oldFormat := data.BaseGameVersion == "1.17.40"
 	worldRange := world.Overworld.Range()
 	pos := data.PlayerPosition
+
+	renderer.Recenter(mgl64.Vec2{
+		float64(pos.X()),
+		float64(pos.Z()),
+	})
 
 	fmt.Println("Completed connection.")
 
@@ -123,13 +130,29 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			switch pk := pk.(type) {
 			case *packet.SubChunkRequest:
 				continue
+			case *packet.PlayerAuthInput:
+				pos = pk.Position
+				renderer.Recenter(mgl64.Vec2{
+					float64(pos.X()),
+					float64(pos.Z()),
+				})
 			case *packet.MovePlayer:
 				pos = pk.Position
-				renderer.Recenter(world.ChunkPos{
-					int32(pos.X()) >> 4,
-					int32(pos.Z()) >> 4,
+				renderer.Recenter(mgl64.Vec2{
+					float64(pos.X()),
+					float64(pos.Z()),
 				})
 			case *packet.Text:
+				if pk.Message == "reset" {
+					chunkMu.Lock()
+					for chunkPos := range chunks {
+						delete(chunks, chunkPos)
+					}
+					chunkMu.Unlock()
+
+					renderer.Rerender()
+					continue
+				}
 				if saveInProgress {
 					saveInProgress = false
 					if pk.Message == "cancel" {
@@ -209,9 +232,9 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 			case *packet.MovePlayer:
 				if pk.EntityRuntimeID == data.EntityRuntimeID {
 					pos = pk.Position
-					renderer.Recenter(world.ChunkPos{
-						int32(pos.X()) >> 4,
-						int32(pos.Z()) >> 4,
+					renderer.Recenter(mgl64.Vec2{
+						float64(pos.X()),
+						float64(pos.Z()),
 					})
 				}
 			case *packet.SubChunk:
@@ -253,6 +276,8 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 				chunkMu.Unlock()
 
 				renderer.Rerender()
+			case *packet.Transfer:
+				fmt.Println(pk.Address, pk.Port)
 			case *packet.LevelChunk:
 				switch pk.SubChunkRequestMode {
 				case protocol.SubChunkRequestModeLimited, protocol.SubChunkRequestModeLimitless:

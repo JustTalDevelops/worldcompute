@@ -179,7 +179,9 @@ func setBlockData(storage *PalettedStorage, blockId, meta, x, y, z byte) error {
 
 	id, ok := StateToRuntimeID(state.name, state.properties)
 	if !ok {
-		return fmt.Errorf("can't find runtime ID for state: %v, %v", state.name, state.properties)
+		// Fuck this shit.
+		fmt.Println(state.name, state.properties)
+		id, _ = StateToRuntimeID("minecraft:air", nil)
 	}
 
 	storage.Set(x, y, z, id)
