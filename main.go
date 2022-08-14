@@ -100,8 +100,15 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 	if oldFormat {
 		log.Debugf("old format detected, using old biomes")
 	}
-	worldRange := world.Overworld.Range()
+
 	pos := data.PlayerPosition
+	dimension := world.Dimension(world.Overworld)
+	switch data.Dimension {
+	case 1:
+		dimension = world.Nether
+	case 2:
+		dimension = world.End
+	}
 
 	renderer.Recenter(mgl64.Vec2{
 		float64(pos.X()),
@@ -172,7 +179,7 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 					fileName := pk.Message
 					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<aqua><bold><italic>Processing chunks to be saved...</italic></bold></aqua>")})
 					go func() {
-						prov, err := mcdb.New(fileName, world.Overworld)
+						prov, err := mcdb.New(fileName, dimension)
 						if err != nil {
 							panic(err)
 						}
@@ -243,7 +250,7 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 							chunkMu.Lock()
 							c, ok := chunks[offsetPos]
 							if !ok {
-								c = chunk.New(airRID, worldRange)
+								c = chunk.New(airRID, dimension.Range())
 								chunks[offsetPos] = c
 							}
 							chunkMu.Unlock()
@@ -267,13 +274,21 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 				}
 				chunkMu.Unlock()
 
+				dimension = world.Dimension(world.Overworld)
+				switch pk.Dimension {
+				case 1:
+					dimension = world.Nether
+				case 2:
+					dimension = world.End
+				}
+
 				renderer.Rerender()
 			case *packet.LevelChunk:
 				switch pk.SubChunkRequestMode {
 				case protocol.SubChunkRequestModeLegacy:
 					go func() {
 						chunkPos := world.ChunkPos{pk.Position.X(), pk.Position.Z()}
-						c, err := chunk.NetworkDecode(airRID, pk.RawPayload, int(pk.SubChunkCount), oldFormat, worldRange)
+						c, err := chunk.NetworkDecode(airRID, pk.RawPayload, int(pk.SubChunkCount), oldFormat, dimension.Range())
 						if err == nil {
 							chunkMu.Lock()
 							chunks[chunkPos] = c
