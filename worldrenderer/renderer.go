@@ -25,14 +25,6 @@ type Renderer struct {
 	renderCache map[world.ChunkPos]*ebiten.Image
 }
 
-// NewRenderer creates a new Renderer instance.
-func NewRenderer(scale int, drift float64, path string) *Renderer {
-	r := &Renderer{scale: scale, drift: drift, chunkMu: new(sync.Mutex), renderMu: new(sync.Mutex), shouldCenter: true}
-	r.centerPos, r.chunks = loadWorld(path)
-	r.renderCache = renderWorld(r.scale, r.chunkMu, r.chunks)
-	return r
-}
-
 // NewRendererDirect creates a new renderer with the given chunks.
 func NewRendererDirect(scale int, drift float64, centerPos mgl64.Vec2, chunkMu *sync.Mutex, chunks map[world.ChunkPos]*chunk.Chunk) *Renderer {
 	r := &Renderer{scale: scale, drift: drift, renderMu: new(sync.Mutex), shouldCenter: true}
