@@ -21,6 +21,7 @@ import (
 	"golang.org/x/oauth2"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -159,8 +160,15 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 					float64(pos.X()),
 					float64(pos.Z()),
 				})
-			case *packet.Text:
-				if pk.Message == "reset" {
+			case *packet.CommandRequest:
+				line := strings.Split(pk.CommandLine, " ")
+				if len(line) == 0 {
+					continue
+				}
+
+				processed := true
+				switch line[0] {
+				case "/reset":
 					chunkMu.Lock()
 					for chunkPos := range chunks {
 						delete(chunks, chunkPos)
@@ -168,47 +176,52 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 					chunkMu.Unlock()
 
 					renderer.Rerender()
-					continue
-				}
-				if saveInProgress {
-					saveInProgress = false
-					if pk.Message == "cancel" {
-						_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<red><bold><italic>Cancelled save.</italic></bold></red>")})
-						continue
-					}
-					fileName := pk.Message
-					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<aqua><bold><italic>Processing chunks to be saved...</italic></bold></aqua>")})
-					go func() {
-						prov, err := mcdb.New(fileName, dimension)
-						if err != nil {
-							panic(err)
-						}
-						for pos, c := range chunks {
-							c.Compact()
-							err = prov.SaveChunk(pos, c)
-							if err != nil {
-								panic(err)
-							}
-						}
-						prov.SaveSettings(&world.Settings{
-							Name:  data.WorldName,
-							Spawn: [3]int{int(pos.X()), int(pos.Y()), int(pos.Z())},
-							Time:  data.Time,
-						})
-						err = prov.Close()
-						if err != nil {
-							panic(err)
-						}
-
-						_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<green><bold><italic>Saved all chunks received to the \"%v\" folder!</italic></bold></green>", fileName)})
-					}()
-					continue
-				}
-				if pk.Message == "save" {
+				case "/save":
 					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<yellow><bold><italic>What would you like to save the file as?</italic></bold></yellow>")})
 					saveInProgress = true
+				case "/cancel":
+					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<red><bold><italic>Terminated save.</italic></bold></red>")})
+					continue
+				default:
+					processed = false
+				}
+				if processed {
+					// Processed a command, don't send it to the server
 					continue
 				}
+			case *packet.Text:
+				if !saveInProgress {
+					break
+				}
+				saveInProgress = false
+
+				fileName := pk.Message
+				_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<aqua><bold><italic>Processing chunks to be saved...</italic></bold></aqua>")})
+				go func() {
+					prov, err := mcdb.New(fileName, dimension)
+					if err != nil {
+						panic(err)
+					}
+					for pos, c := range chunks {
+						c.Compact()
+						err = prov.SaveChunk(pos, c)
+						if err != nil {
+							panic(err)
+						}
+					}
+					prov.SaveSettings(&world.Settings{
+						Name:  data.WorldName,
+						Spawn: [3]int{int(pos.X()), int(pos.Y()), int(pos.Z())},
+						Time:  data.Time,
+					})
+					err = prov.Close()
+					if err != nil {
+						panic(err)
+					}
+
+					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<green><bold><italic>Saved all chunks received to the \"%v\" folder!</italic></bold></green>", fileName)})
+				}()
+				continue
 			}
 			if err := serverConn.WritePacket(pk); err != nil {
 				if disconnect, ok := errors.Unwrap(err).(minecraft.DisconnectError); ok {
@@ -230,6 +243,22 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 				return
 			}
 			switch pk := pk.(type) {
+			case *packet.AvailableCommands:
+				pk.Commands = append(pk.Commands, protocol.Command{
+					Name:        "reset",
+					Description: text.Colourf("<dark-aqua>Reset all downloaded chunks</dark-aqua>"),
+					Flags:       0x1,
+				})
+				pk.Commands = append(pk.Commands, protocol.Command{
+					Name:        "save",
+					Description: text.Colourf("<dark-aqua>Save all downloaded chunks to a folder</dark-aqua>"),
+					Flags:       0x1,
+				})
+				pk.Commands = append(pk.Commands, protocol.Command{
+					Name:        "cancel",
+					Description: text.Colourf("<dark-aqua>Terminate a save-in-progress</dark-aqua>"),
+					Flags:       0x1,
+				})
 			case *packet.MovePlayer:
 				if pk.EntityRuntimeID == data.EntityRuntimeID {
 					pos = pk.Position
