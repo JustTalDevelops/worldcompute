@@ -37,15 +37,6 @@ func main() {
 	log.Formatter = &logrus.TextFormatter{ForceColors: true}
 	log.Level = logrus.DebugLevel
 
-	renderer = worldrenderer.NewRendererDirect(4, 6.5, mgl64.Vec2{}, &chunkMu, chunks)
-
-	ebiten.SetWindowSize(1718, 1360)
-	ebiten.SetWindowResizable(true)
-	ebiten.SetWindowTitle("worldrenderer")
-	if err := ebiten.RunGame(renderer); err != nil {
-		log.Fatal(err)
-	}
-
 	src := tokenSource()
 	conf, err := readConfig()
 	if err != nil {
@@ -76,6 +67,15 @@ func main() {
 			go handleConn(log, c.(*minecraft.Conn), listener, conf, src)
 		}
 	}()
+
+	renderer = worldrenderer.NewRendererDirect(4, 6.5, mgl64.Vec2{}, &chunkMu, chunks)
+
+	ebiten.SetWindowSize(1718, 1360)
+	ebiten.SetWindowResizable(true)
+	ebiten.SetWindowTitle("worldrenderer")
+	if err := ebiten.RunGame(renderer); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // handleConn handles a new incoming minecraft.Conn from the minecraft.Listener passed.
