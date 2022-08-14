@@ -17,12 +17,10 @@ import (
 	"github.com/sandertv/gophertunnel/minecraft/protocol"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
 	"github.com/sandertv/gophertunnel/minecraft/text"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 	"io/ioutil"
-	"log"
 	"os"
-	"os/exec"
-	"runtime"
 	"sync"
 )
 
@@ -33,31 +31,40 @@ var (
 	saveInProgress bool
 )
 
-// The following program implements a proxy that forwards players from one local address to a remote address.
+// main starts the renderer and proxy.
 func main() {
-	config := readConfig()
+	log := logrus.New()
+	log.Formatter = &logrus.TextFormatter{ForceColors: true}
+	log.Level = logrus.DebugLevel
+
 	src := tokenSource()
+	conf, err := readConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	go func() {
-		fmt.Println("worldcompute has loaded. connect to " + config.Connection.LocalAddress)
-		fmt.Println("redirecting connections to " + config.Connection.RemoteAddress)
-		p, err := minecraft.NewForeignStatusProvider(config.Connection.RemoteAddress)
+		log.Println("worldcompute has loaded. connect to " + conf.Connection.LocalAddress)
+		log.Println("redirecting connections to " + conf.Connection.RemoteAddress)
+
+		p, err := minecraft.NewForeignStatusProvider(conf.Connection.RemoteAddress)
 		if err != nil {
 			panic(err)
 		}
 		listener, err := minecraft.ListenConfig{
 			StatusProvider: p,
-		}.Listen("raknet", config.Connection.LocalAddress)
+		}.Listen("raknet", conf.Connection.LocalAddress)
 		if err != nil {
 			panic(err)
 		}
 		defer listener.Close()
+
 		for {
 			c, err := listener.Accept()
 			if err != nil {
 				panic(err)
 			}
-			go handleConn(c.(*minecraft.Conn), listener, config, src)
+			go handleConn(log, c.(*minecraft.Conn), listener, conf, src)
 		}
 	}()
 
@@ -72,7 +79,7 @@ func main() {
 }
 
 // handleConn handles a new incoming minecraft.Conn from the minecraft.Listener passed.
-func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config config, src oauth2.TokenSource) {
+func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Listener, config config, src oauth2.TokenSource) {
 	clientData := conn.ClientData()
 	clientData.ServerAddress = config.Connection.RemoteAddress
 
@@ -81,7 +88,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 		ClientData:  clientData,
 	}.Dial("raknet", config.Connection.RemoteAddress)
 	if err != nil {
-		fmt.Println(err)
+		log.Errorf("error connecting to %s: %v", config.Connection.RemoteAddress, err)
 		return
 	}
 
@@ -90,6 +97,9 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 
 	airRID, _ := chunk.StateToRuntimeID("minecraft:air", nil)
 	oldFormat := data.BaseGameVersion == "1.17.40"
+	if oldFormat {
+		log.Debugf("old format detected, using old biomes")
+	}
 	worldRange := world.Overworld.Range()
 	pos := data.PlayerPosition
 
@@ -98,27 +108,29 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 		float64(pos.Z()),
 	})
 
-	fmt.Println("Completed connection.")
+	log.Println("completed connection to " + config.Connection.RemoteAddress)
 
 	var g sync.WaitGroup
 	g.Add(2)
 	go func() {
 		if err := conn.StartGame(data); err != nil {
-			fmt.Println(err)
+			log.Errorf("error starting game: %v", err)
 			return
 		}
 		g.Done()
 	}()
 	go func() {
 		if err := serverConn.DoSpawn(); err != nil {
-			fmt.Println(err)
+			log.Errorf("error spawning: %v", err)
 			return
 		}
 		g.Done()
 	}()
 	g.Wait()
-	fmt.Println("Spawned in.")
 
+	log.Printf("successfully spawned in to %s", config.Connection.RemoteAddress)
+
+	// TODO: Clean up this shithole lmao
 	go func() {
 		defer listener.Disconnect(conn, "connection lost")
 		defer serverConn.Close()
@@ -128,8 +140,6 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 				return
 			}
 			switch pk := pk.(type) {
-			case *packet.SubChunkRequest:
-				continue
 			case *packet.PlayerAuthInput:
 				pos = pk.Position
 				renderer.Recenter(mgl64.Vec2{
@@ -160,16 +170,9 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 						continue
 					}
 					fileName := pk.Message
-					fullPath := config.Downloader.OutputDirectory + string(os.PathSeparator) + fileName
 					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<aqua><bold><italic>Processing chunks to be saved...</italic></bold></aqua>")})
 					go func() {
-						dir, err := ioutil.TempDir(os.TempDir(), fileName)
-						if err != nil {
-							panic(err)
-						}
-						defer os.RemoveAll(dir)
-
-						prov, err := mcdb.New(dir, world.Overworld)
+						prov, err := mcdb.New(fileName, world.Overworld)
 						if err != nil {
 							panic(err)
 						}
@@ -190,16 +193,7 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 							panic(err)
 						}
 
-						err = archive(dir, fullPath+".mcworld")
-						if err != nil {
-							panic(err)
-						}
-
-						if runtime.GOOS == "windows" {
-							_ = exec.Command(`explorer`, `/select,`, fullPath+".mcworld").Run()
-						}
-
-						_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<green><bold><italic>Saved all chunks received to \"%v.mcworld\"!</italic></bold></green>", fileName)})
+						_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<green><bold><italic>Saved all chunks received to the \"%v\" folder!</italic></bold></green>", fileName)})
 					}()
 					continue
 				}
@@ -260,8 +254,6 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 								chunkMu.Lock()
 								c.Sub()[ind] = newSub
 								chunkMu.Unlock()
-							} else {
-								fmt.Println(err)
 							}
 
 							renderer.RerenderChunk(offsetPos)
@@ -276,40 +268,18 @@ func handleConn(conn *minecraft.Conn, listener *minecraft.Listener, config confi
 				chunkMu.Unlock()
 
 				renderer.Rerender()
-			case *packet.Transfer:
-				fmt.Println(pk.Address, pk.Port)
 			case *packet.LevelChunk:
 				switch pk.SubChunkRequestMode {
-				case protocol.SubChunkRequestModeLimited, protocol.SubChunkRequestModeLimitless:
-					subChunkLimit := byte(24)
-					if pk.SubChunkRequestMode == protocol.SubChunkRequestModeLimited {
-						subChunkLimit = byte(pk.HighestSubChunk)
-					}
-
-					var offsets [][3]byte
-					for x := byte(0); x < 4; x++ {
-						for z := byte(0); z < 4; z++ {
-							for y := subChunkLimit; y > 0; y-- {
-								offsets = append(offsets, [3]byte{x << 4, y, z << 4})
-							}
-						}
-					}
-					_ = serverConn.WritePacket(&packet.SubChunkRequest{
-						Position: protocol.SubChunkPos{pk.Position.X(), 0, pk.Position.Z()},
-						Offsets:  offsets,
-					})
 				case protocol.SubChunkRequestModeLegacy:
 					go func() {
+						chunkPos := world.ChunkPos{pk.Position.X(), pk.Position.Z()}
 						c, err := chunk.NetworkDecode(airRID, pk.RawPayload, int(pk.SubChunkCount), oldFormat, worldRange)
 						if err == nil {
 							chunkMu.Lock()
-							chunkPos := world.ChunkPos{pk.Position.X(), pk.Position.Z()}
 							chunks[chunkPos] = c
 							chunkMu.Unlock()
 
 							renderer.RerenderChunk(chunkPos)
-						} else {
-							fmt.Println(err)
 						}
 					}()
 				}
@@ -331,37 +301,29 @@ type config struct {
 	}
 }
 
-func readConfig() config {
+// readConfig reads the configuration from the config.toml file, or creates the file if it does not yet exist.
+func readConfig() (config, error) {
 	c := config{}
+	c.Connection.LocalAddress = ":19132"
+	c.Connection.RemoteAddress = "play.lbsg.net:19132"
 	if _, err := os.Stat("config.toml"); os.IsNotExist(err) {
-		f, err := os.Create("config.toml")
-		if err != nil {
-			log.Fatalf("error creating config: %v", err)
-		}
 		data, err := toml.Marshal(c)
 		if err != nil {
-			log.Fatalf("error encoding default config: %v", err)
+			return c, fmt.Errorf("failed encoding default config: %v", err)
 		}
-		if _, err := f.Write(data); err != nil {
-			log.Fatalf("error writing encoded default config: %v", err)
+		if err := os.WriteFile("config.toml", data, 0644); err != nil {
+			return c, fmt.Errorf("failed creating config: %v", err)
 		}
-		_ = f.Close()
+		return c, nil
 	}
-	data, err := ioutil.ReadFile("config.toml")
+	data, err := os.ReadFile("config.toml")
 	if err != nil {
-		log.Fatalf("error reading config: %v", err)
+		return c, fmt.Errorf("error reading config: %v", err)
 	}
 	if err := toml.Unmarshal(data, &c); err != nil {
-		log.Fatalf("error decoding config: %v", err)
+		return c, fmt.Errorf("error decoding config: %v", err)
 	}
-	if c.Connection.LocalAddress == "" {
-		c.Connection.LocalAddress = "0.0.0.0:19132"
-	}
-	data, _ = toml.Marshal(c)
-	if err := ioutil.WriteFile("config.toml", data, 0644); err != nil {
-		log.Fatalf("error writing config file: %v", err)
-	}
-	return c
+	return c, nil
 }
 
 // tokenSource returns a token source for using with a gophertunnel client. It either reads it from the

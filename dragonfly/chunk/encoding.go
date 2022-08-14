@@ -125,14 +125,15 @@ func (networkEncoding) decodePalette(buf *bytes.Buffer, blockSize paletteSize, _
 		}
 	}
 
-	blocks, temp := make([]uint32, paletteCount), int32(0)
+	var err error
+	palette, temp := newPalette(blockSize, make([]uint32, paletteCount)), int32(0)
 	for i := int32(0); i < paletteCount; i++ {
-		if err := protocol.Varint32(buf, &temp); err != nil {
+		if err = protocol.Varint32(buf, &temp); err != nil {
 			return nil, fmt.Errorf("error decoding palette entry: %w", err)
 		}
-		blocks[i] = uint32(temp)
+		palette.values[i] = uint32(temp)
 	}
-	return &Palette{values: blocks, size: blockSize}, nil
+	return palette, nil
 }
 
 // networkPersistentEncoding implements the Chunk encoding for sending over network with persistent storage.
@@ -170,15 +171,14 @@ func (networkPersistentEncoding) decodePalette(buf *bytes.Buffer, blockSize pale
 		}
 	}
 
-	uint32s := make([]uint32, paletteCount)
+	var ok bool
+	palette, temp := newPalette(blockSize, make([]uint32, paletteCount)), uint32(0)
 	for i, b := range blocks {
-		temp, ok := StateToRuntimeID("minecraft:"+b.Name, b.State)
+		temp, ok = StateToRuntimeID("minecraft:"+b.Name, b.State)
 		if !ok {
-			// Fuck this shit.
-			fmt.Println(b.Name, b.State)
-			temp, _ = StateToRuntimeID("minecraft:air", nil)
+			return nil, fmt.Errorf("cannot get runtime ID of block state %v{%+v}", b.Name, b.State)
 		}
-		uint32s[i] = temp
+		palette.values[i] = temp
 	}
-	return &Palette{values: uint32s, size: blockSize}, nil
+	return palette, nil
 }

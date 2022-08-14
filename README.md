@@ -1,2 +1,2 @@
 # worldcompute
-live-computation of minecraft: bedrock chunks and worlds, based off of the wonderful dragonfly
+live-computation, parsing, and savings of minecraft: bedrock worlds
