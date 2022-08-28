@@ -29,8 +29,3 @@ worldrenderer will automatically run and render the chunks in cache in real-time
 - `v1` (post-v1.2.13, only a single layer)
 - `v8/v9` (post-v1.2.13, up to 256 layers) (persistent and runtime)
 - `v9 (sub-chunk request system)` (post-v1.18.0, up to 256 layers) (persistent and runtime)
-
-## credits
-
-special thanks to [T 14Raptor](https://github.com/T14Raptor) for his help with the original worldcompute project, and
-[Sandertv](https://github.com/Sandertv) for his work on gophertunnel and dragonfly.

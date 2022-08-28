@@ -26,10 +26,9 @@ import (
 )
 
 var (
-	chunkMu        sync.Mutex
-	chunks         = make(map[world.ChunkPos]*chunk.Chunk)
-	renderer       *worldrenderer.Renderer
-	saveInProgress bool
+	mu       sync.Mutex
+	chunks   = make(map[world.ChunkPos]*chunk.Chunk)
+	renderer *worldrenderer.Renderer
 )
 
 // main starts the renderer and proxy.
@@ -69,7 +68,7 @@ func main() {
 		}
 	}()
 
-	renderer = worldrenderer.NewRendererDirect(4, 6.5, mgl64.Vec2{}, &chunkMu, chunks)
+	renderer = worldrenderer.NewRendererDirect(4, 6.5, mgl64.Vec2{}, &mu, chunks)
 
 	ebiten.SetWindowSize(1718, 1360)
 	ebiten.SetWindowResizable(true)
@@ -98,9 +97,6 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 
 	airRID, _ := chunk.StateToRuntimeID("minecraft:air", nil)
 	oldFormat := data.BaseGameVersion == "1.17.40"
-	if oldFormat {
-		log.Debugf("old format detected, using old biomes")
-	}
 
 	pos := data.PlayerPosition
 	dimension := world.Dimension(world.Overworld)
@@ -137,8 +133,6 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 	g.Wait()
 
 	log.Printf("successfully spawned in to %s", config.Connection.RemoteAddress)
-
-	// TODO: Clean up this shithole lmao
 	go func() {
 		defer listener.Disconnect(conn, "connection lost")
 		defer serverConn.Close()
@@ -165,63 +159,48 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 				if len(line) == 0 {
 					continue
 				}
-
-				processed := true
 				switch line[0] {
-				case "/reset":
-					chunkMu.Lock()
-					for chunkPos := range chunks {
-						delete(chunks, chunkPos)
-					}
-					chunkMu.Unlock()
-
-					renderer.Rerender()
-				case "/save":
-					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<yellow><bold><italic>What would you like to save the file as?</italic></bold></yellow>")})
-					saveInProgress = true
 				case "/cancel":
 					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<red><bold><italic>Terminated save.</italic></bold></red>")})
 					continue
-				default:
-					processed = false
-				}
-				if processed {
-					// Processed a command, don't send it to the server
-					continue
-				}
-			case *packet.Text:
-				if !saveInProgress {
-					break
-				}
-				saveInProgress = false
-
-				fileName := pk.Message
-				_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<aqua><bold><italic>Processing chunks to be saved...</italic></bold></aqua>")})
-				go func() {
-					prov, err := mcdb.New(fileName, dimension)
-					if err != nil {
-						panic(err)
+				case "/reset":
+					mu.Lock()
+					for chunkPos := range chunks {
+						delete(chunks, chunkPos)
 					}
-					for pos, c := range chunks {
-						c.Compact()
-						err = prov.SaveChunk(pos, c)
+					mu.Unlock()
+
+					renderer.Rerender()
+					continue
+				case "/save":
+					saveName := strings.Join(line[1:], " ")
+					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<aqua><bold><italic>Processing chunks to be saved...</italic></bold></aqua>")})
+					go func() {
+						prov, err := mcdb.New(saveName, dimension)
 						if err != nil {
 							panic(err)
 						}
-					}
-					prov.SaveSettings(&world.Settings{
-						Name:  data.WorldName,
-						Spawn: [3]int{int(pos.X()), int(pos.Y()), int(pos.Z())},
-						Time:  data.Time,
-					})
-					err = prov.Close()
-					if err != nil {
-						panic(err)
-					}
+						for pos, c := range chunks {
+							c.Compact()
+							err = prov.SaveChunk(pos, c)
+							if err != nil {
+								panic(err)
+							}
+						}
+						prov.SaveSettings(&world.Settings{
+							Name:  data.WorldName,
+							Spawn: [3]int{int(pos.X()), int(pos.Y()), int(pos.Z())},
+							Time:  data.Time,
+						})
+						err = prov.Close()
+						if err != nil {
+							panic(err)
+						}
 
-					_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<green><bold><italic>Saved all chunks received to the \"%v\" folder!</italic></bold></green>", fileName)})
-				}()
-				continue
+						_ = conn.WritePacket(&packet.Text{Message: text.Colourf("<green><bold><italic>Saved all chunks received to the \"%v\" folder!</italic></bold></green>", saveName)})
+					}()
+					continue
+				}
 			}
 			if err := serverConn.WritePacket(pk); err != nil {
 				if disconnect, ok := errors.Unwrap(err).(minecraft.DisconnectError); ok {
@@ -276,20 +255,20 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 								pk.Position.Z() + int32(entry.Offset[2]),
 							}
 
-							chunkMu.Lock()
+							mu.Lock()
 							c, ok := chunks[offsetPos]
 							if !ok {
 								c = chunk.New(airRID, dimension.Range())
 								chunks[offsetPos] = c
 							}
-							chunkMu.Unlock()
+							mu.Unlock()
 
 							var ind byte
 							newSub, err := chunk.DecodeSubChunk(bytes.NewBuffer(entry.RawPayload), c, &ind, chunk.NetworkEncoding)
 							if err == nil {
-								chunkMu.Lock()
+								mu.Lock()
 								c.Sub()[ind] = newSub
-								chunkMu.Unlock()
+								mu.Unlock()
 							}
 
 							renderer.RerenderChunk(offsetPos)
@@ -297,11 +276,11 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 					}
 				}()
 			case *packet.ChangeDimension:
-				chunkMu.Lock()
+				mu.Lock()
 				for chunkPos := range chunks {
 					delete(chunks, chunkPos)
 				}
-				chunkMu.Unlock()
+				mu.Unlock()
 
 				dimension = world.Dimension(world.Overworld)
 				switch pk.Dimension {
@@ -319,9 +298,9 @@ func handleConn(log *logrus.Logger, conn *minecraft.Conn, listener *minecraft.Li
 						chunkPos := world.ChunkPos{pk.Position.X(), pk.Position.Z()}
 						c, err := chunk.NetworkDecode(airRID, pk.RawPayload, int(pk.SubChunkCount), oldFormat, dimension.Range())
 						if err == nil {
-							chunkMu.Lock()
+							mu.Lock()
 							chunks[chunkPos] = c
-							chunkMu.Unlock()
+							mu.Unlock()
 
 							renderer.RerenderChunk(chunkPos)
 						}
@@ -389,8 +368,6 @@ func tokenSource() oauth2.TokenSource {
 	src := auth.RefreshTokenSource(token)
 	_, err = src.Token()
 	if err != nil {
-		// The cached refresh token expired and can no longer be used to obtain a new token. We require the
-		// user to log in again and use that token instead.
 		token, err = auth.RequestLiveToken()
 		check(err)
 		src = auth.RefreshTokenSource(token)
