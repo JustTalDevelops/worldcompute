@@ -45,10 +45,17 @@ func init() {
 			return "", nil, false
 		}
 		state := blocks[runtimeID]
+		if updatedEntry, ok := upgradeAliasEntry(state); ok {
+			state = updatedEntry
+		}
 		return state.Name, state.Properties, true
 	}
 	chunk.StateToRuntimeID = func(name string, properties map[string]interface{}) (runtimeID uint32, found bool) {
-		rid, ok := stateRuntimeIDs[stateHash{name: name, properties: hashProperties(properties)}]
+		state := blockState{Name: name, Properties: properties}
+		if updatedEntry, ok := upgradeAliasEntry(state); ok {
+			state = updatedEntry
+		}
+		rid, ok := stateRuntimeIDs[stateHash{name: state.Name, properties: hashProperties(state.Properties)}]
 		return rid, ok
 	}
 }

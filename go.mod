@@ -14,7 +14,7 @@ require (
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/pelletier/go-toml v1.9.4
 	github.com/sandertv/go-raknet v1.11.1 // indirect
-	github.com/sandertv/gophertunnel v1.24.0
+	github.com/sandertv/gophertunnel v1.24.6
 	go.uber.org/atomic v1.9.0
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
 	golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d // indirect
