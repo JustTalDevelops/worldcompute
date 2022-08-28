@@ -32,5 +32,5 @@ worldrenderer will automatically run and render the chunks in cache in real-time
 
 ## credits
 
-special thanks to [T 14Raptor](https://github.com/T14Raptor) for the original worldcompute project, and
+special thanks to [T 14Raptor](https://github.com/T14Raptor) for his help with the original worldcompute project, and
 [Sandertv](https://github.com/Sandertv) for his work on gophertunnel and dragonfly.
