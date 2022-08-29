@@ -23,6 +23,18 @@ worldrenderer will automatically run and render the chunks in cache in real-time
 - `save` - save all downloaded chunks to a folder.
 - `cancel` - terminate a save-in-progress.
 
+## worldrenderer
+
+worldrenderer will automatically move based on the position of the player in game. you can also use the following controls
+to manage the renderer when you aren't moving in-game:
+
+- `up` to move the camera up.
+- `down` to move the camera down.
+- `left` to move the camera to the left.
+- `right` to move the camera to the right.
+- `scroll up` to scale the rendered world up.
+- `scroll down` to scale the rendered world down.
+
 ## supported formats
 
 - `v0` (pre-v1.2.13) (legacy, only used by PM3)
